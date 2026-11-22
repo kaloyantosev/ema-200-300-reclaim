@@ -1,0 +1,42 @@
+name: Refresh stock data
+
+# Weekdays 07:00 UTC, an hour after sector-terminal refreshes the ETF prices. "Run workflow" runs it now.
+# Publishes to the orphan `data` branch (force-pushed, one commit, so price history never piles up in git).
+on:
+  schedule:
+    - cron: '0 7 * * 2-6'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [build.mjs, strategy.js, scripts/fetch_stocks.py, .github/workflows/refresh-stocks.yml]
+
+concurrency: refresh-stocks
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install yfinance pandas
+      - run: python scripts/fetch_stocks.py out/stocks
+      - run: STOCKS=out/stocks node build.mjs
+      - name: Publish data branch
+        run: |
+          cp summary.json events.json screener.json stocks.json out/
+          cd out
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "data: $(node -p "require('./summary.json').asOf")"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data

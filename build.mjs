@@ -7,6 +7,7 @@ const { runStrategy, resample, HORIZONS, WARMUP } = createRequire(import.meta.ur
 const SRC = process.argv[2];
 const RAW = "https://raw.githubusercontent.com/kaloyantosev/sector-terminal/main/public/data/";
 const SKIP = new Set(["_IRX.json", "_TNX.json", "_VIX.json"]); // yields / volatility, not price trends
+const SKIP_CAT = new Set(["Macro & Rates"]);
 const load = async (p) => SRC ? JSON.parse(readFileSync(`${SRC}/${p}`, "utf8")) : (async () => {
   for (let t = 0; t < 3; t++) { const r = await fetch(RAW + p); if (r.ok) return r.json(); }
   throw new Error(`fetch failed: ${p}`);
@@ -33,7 +34,7 @@ const ALIASES = { "Technology": "Information Technology", "Energy / Oil & Gas": 
 const uni = await load("universe.json");
 const best = new Map();
 for (const s of uni.sectors) {
-  if (SKIP.has(s.file)) continue;
+  if (SKIP.has(s.file) || SKIP_CAT.has(s.category)) continue;
   const key = (s.category.startsWith("Macro") ? s.category : "equity") + "|" + (ALIASES[s.sector] ?? s.sector);
   if (!best.has(key) || s.start_date < best.get(key).start_date) best.set(key, s);
 }
@@ -41,8 +42,17 @@ const list = [...best.values()];
 // Screener: where each index stands now on daily, weekly and monthly candles (same rules on every timeframe).
 // pos: "A" HA close above both EMAs, "B" below both, "2" below EMA 200 only, "3" below EMA 300 only.
 // null: fewer than WARMUP + 2 candles on that timeframe (monthly needs about 25 years of history).
+// chg: % price change over each heatmap period (trading days back; YTD = vs last close of the previous year).
+const CHG = { "1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252 };
+function changes(d) {
+  const c = d.close, n = c.length - 1, out = {};
+  for (const [k, b] of Object.entries(CHG)) out[k] = n - b >= 0 ? r2((c[n] / c[n - b] - 1) * 100, 2) : null;
+  const y = d.dates[n].slice(0, 4), j = d.dates.findLastIndex((t) => t.slice(0, 4) < y);
+  out.YTD = j >= 0 ? r2((c[n] / c[j] - 1) * 100, 2) : null;
+  return out;
+}
 function screen(d) {
-  const out = {};
+  const out = { chg: changes(d) };
   for (const tf of ["D", "W", "M"]) {
     const x = resample(d, tf), i = x.close.length - 1;
     if (i <= WARMUP) { out[tf] = null; continue; }
@@ -99,5 +109,15 @@ if (SRC) {
   const page = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   if (!page.includes("<head>")) throw new Error("index.html has no <head>");
   writeFileSync(new URL("../index.html", import.meta.url), page.replace("<head>", '<head>\n<base href="ema-cross/">'));
+}
+// US stocks (scripts/fetch_stocks.py): screener rows only, no backtest or calendar. STOCKS=<dir> node build.mjs
+if (process.env.STOCKS) {
+  const dir = process.env.STOCKS, rows = [];
+  for (const s of JSON.parse(readFileSync(`${dir}/_list.json`, "utf8"))) {
+    const x = screen(JSON.parse(readFileSync(`${dir}/${s.t}.json`, "utf8")));
+    if (x.D) rows.push({ file: s.t + ".json", tv: s.tv, name: s.n, x });
+  }
+  writeFileSync(new URL("./stocks.json", import.meta.url), JSON.stringify(rows));
+  console.log(`stocks.json: ${rows.length} stocks`);
 }
 console.log(`summary.json: ${symbols.length} symbols, ${summary.long.total_signals} long + ${summary.short.total_signals} short signals, data as of ${uni.asOf}`);

@@ -11,7 +11,7 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - **Flat filter:** no signal when the EMAs are tangled (within 0.2% of each other today and on all of the previous 40 days) and flat (EMA 200 moved under 2% in 20 days). Lines that only meet briefly, as in a V-recovery, do not block a signal.
 - **Stop:** beyond the far line, buffer = 2% + the gap between the lines. Longs: lower EMA x (1 - buffer), hit on the daily low. Shorts: upper EMA x (1 + buffer), hit on the daily high. Fixed at entry; fills at the stop or the open if it gaps through.
 - No exit rule. Results are the return after 1, 4, 8, 12, 16 and 20 weeks, or the stop loss if hit first.
-- Skipped: `^IRX`, `^TNX`, `^VIX` (yields and volatility).
+- Skipped: `^IRX`, `^TNX`, `^VIX` (yields and volatility) and the whole Macro & Rates category.
 - **One index per industry:** funds tracking the same industry (XLV, VHT, IYH, FHLC... for health care) count once; the one with the longest history is kept. 100 industries out of 209 symbols.
 
 ## Files
@@ -23,6 +23,10 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - `tradingview/ema_200_300_ha_cross.pine`: the same rule as a TradingView indicator (paste into the Pine Editor, daily chart).
 - `mailer/daily_signals.py`: daily mail (10:00 Europe/Sofia, weekdays, `.github/workflows/signal-mail.yml`) with the indexes that signalled on the last session and the 5 large/mid/small cap S&P 1500 stocks in each sector with the highest relative volume. Needs repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_TO`. Preview: `python ema-cross/mailer/daily_signals.py --dry-run`.
 - `tradingview/ema200_stretch_oscillator.pine`: oscillator of price stretch vs the EMA 200, coloured by how extreme it is for that symbol.
+
+## US stocks
+
+`scripts/fetch_stocks.py` downloads about 3 years of daily prices for every US-listed common stock (ticker list from nasdaqtrader.com, prices from Yahoo Finance). `STOCKS=out/stocks node build.mjs` adds their screener rows (`stocks.json`). The workflow `.github/workflows/refresh-stocks.yml` runs both every weekday and force-pushes the result to the `data` branch, which the site reads at runtime. Stocks show on daily candles only and are not in the signal calendar.
 
 ## Run
 

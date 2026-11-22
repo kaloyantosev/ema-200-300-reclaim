@@ -10,19 +10,30 @@
 :root[data-theme="dark"] { --bg:#0f1115; --fg:#e7e9ee; --muted:#9aa1ad; --line:#262a33; --card:#171a21; --pos:#3ccf8e; --neg:#ff6b5e; --accent:#7aa2ff; --e200:#f0b23c; --e300:#b38cff; }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
-header { padding:20px 16px 8px; max-width:1300px; margin:auto; }
+header { padding:20px 16px 8px; max-width:1400px; margin:auto; }
 h1 { font-size:20px; margin:0 0 4px; }
 h2 { font-size:15px; margin:24px 0 8px; }
 .muted { color:var(--muted); }
-main { max-width:1300px; margin:auto; padding:0 16px 40px; display:grid; grid-template-columns:300px 1fr; gap:20px; }
+main { max-width:1400px; margin:auto; padding:0 16px 40px; display:grid; grid-template-columns:1fr 260px; gap:20px; }
 main > section, main > aside { min-width:0; }  /* let wide tables scroll inside .wrap instead of widening the page */
-@media (max-width: 860px) { main { grid-template-columns:1fr; } #list { max-height:300px; } }
-#side input { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
-#list { max-height:calc(100vh - 140px); overflow:auto; margin-top:8px; border:1px solid var(--line); border-radius:8px; }
-.cat { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); padding:8px 10px 4px; background:var(--card); position:sticky; top:0; }
-.sym { display:flex; justify-content:space-between; gap:8px; padding:5px 10px; cursor:pointer; border-top:1px solid var(--line); }
-.sym:hover, .sym.on { background:var(--card); }
-.sym .n { font-variant-numeric:tabular-nums; font-size:12px; }
+@media (max-width: 860px) { main { grid-template-columns:1fr; } #watch { position:static; max-height:none; } }
+#watch { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+#watch h2 { margin:0; padding:10px 12px; border-bottom:1px solid var(--line); }
+.wl { display:flex; align-items:center; gap:8px; padding:6px 8px 6px 12px; border-top:1px solid var(--line); font-size:13px; }
+.wl:first-of-type { border-top:0; }
+.wl > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wl small { color:var(--muted); }
+.star { border:0; background:none; color:var(--muted); cursor:pointer; font-size:16px; line-height:1; padding:2px 4px; }
+.star.on { color:#e3a008; }
+.star:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-radius:4px; }
+#heat { display:flex; flex-direction:column; gap:10px; }
+.hcat { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px; }
+.hgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:3px; }
+.tile { border:0; border-radius:4px; padding:7px 4px; color:#fff; font:inherit; font-size:12px; line-height:1.25; cursor:pointer; text-align:center; text-shadow:0 1px 1px rgba(0,0,0,.35); }
+.tile b { display:block; font-size:13px; }
+.tile:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.hscale { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+.hscale i { width:160px; height:10px; border-radius:3px; background:linear-gradient(90deg,#ff2b2b,#8b2e35,#3a3d47,#24703f,#18e05a); }
 .wrap { overflow-x:auto; }
 table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
 th, td { padding:5px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
@@ -56,7 +67,7 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
 .console input[type=checkbox], .console input[type=radio] { accent-color:var(--accent); }
 #scrTbl th[data-k] { cursor:pointer; user-select:none; }
 #scrTbl th[data-k]:focus-visible, .console :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-#scrTbl td:nth-child(-n+2), #scrTbl th:nth-child(-n+2) { text-align:left; }
+#scrTbl td:nth-child(-n+4), #scrTbl th:nth-child(-n+4) { text-align:left; }
 #scrTbl tr[data-f] { cursor:pointer; }
 #scrTbl tr[data-f]:hover { background:var(--card); }
 #weekTbl tr[data-f] { cursor:pointer; }
@@ -68,18 +79,18 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
   <h1>EMA 200/300 staggered cross: longs and shorts</h1>
   <div class="muted" id="sub">Loading…</div>
   <div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px">
-    <a class="btn" href="https://github.com/kaloyantosev/sector-terminal/actions/workflows/refresh-data.yml" target="_blank" rel="noopener">&#x27F3; Refresh data now</a>
-    <span class="muted">Opens GitHub: click <b>Run workflow</b>. New data shows here about 5 minutes later. It also refreshes by itself every weekday after the US close.</span>
+    <a class="btn" href="https://github.com/kaloyantosev/ema-200-300-reclaim/actions/workflows/refresh-stocks.yml" target="_blank" rel="noopener">&#x27F3; Refresh data now</a>
+    <span class="muted">Opens GitHub: click <b>Run workflow</b>. New data shows here about 15 minutes later. It also refreshes by itself every weekday after the US close.</span>
   </div>
 </header>
 <main>
-  <aside id="side">
-    <input id="q" placeholder="Filter symbols…" aria-label="Filter symbols">
-    <div id="list"></div>
-  </aside>
   <section>
     <h2 style="margin-top:0">Filter console</h2>
-    <div class="console" role="search" aria-label="Filter the indexes">
+    <div class="console" role="search" aria-label="Filter indexes and stocks">
+      <div class="fgroup"><span class="flabel">Show</span>
+        <label><input type="radio" name="kind" value="" checked> ETFs and stocks</label>
+        <label><input type="radio" name="kind" value="etf"> ETFs / indexes only</label>
+        <label><input type="radio" name="kind" value="stock"> Stocks only</label></div>
       <div class="fgroup"><span class="flabel">Timeframe</span>
         <div class="tabs" id="tfTabs"><button data-tf="D" class="on">Daily</button> <button data-tf="W">Weekly</button> <button data-tf="M">Monthly</button></div></div>
       <div class="fgroup"><span class="flabel">Heikin Ashi close vs EMA 200 / 300</span>
@@ -102,18 +113,10 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     </div>
     <div class="muted" id="fCount" style="margin:8px 0 4px;font-size:13px" aria-live="polite"></div>
     <div class="wrap" style="max-height:460px;overflow:auto"><table id="scrTbl"></table></div>
-    <h2>Rules</h2>
-    <div class="box muted" style="font-size:13px">
-      <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles, EMA 200 and EMA 300 on the HA close. <b style="color:var(--fg)">Long:</b> the HA candle broke below both lines, then the whole HA body (open and close) is above both; enter at that day's real close.
-      <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A one-candle cross of both lines counts. Part of the HA body past the second line counts as a break of it; a dip that never breaks the second line is not a signal.
-      No signal when the EMAs are flat and tangled: within 0.2% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices. The filter console and the W / M chart buttons apply the same rules to weekly and monthly Heikin Ashi candles (EMA 200/300 of weekly or monthly closes). One index per industry (the one with the longest history), so XLV stands for all the health care funds.
-      Stop = beyond the far line × (2% + EMA gap): lower EMA × (1 − buffer) for longs, upper EMA × (1 + buffer) for shorts. Fixed at entry, hit on the daily low (longs) or high (shorts).
-      No exit rule: each column is the return if held that long, or the stop loss if hit first. Short returns are shown as the short's profit.
-    </div>
-    <h2>All symbols</h2>
-    <div class="tabs" id="dirTabs" style="margin-bottom:10px"><button data-d="long" class="on">Longs</button> <button data-d="short">Shorts</button></div>
-    <div class="kpis" id="kpis"></div>
-    <div class="wrap"><table id="allTbl"></table></div>
+    <h2>Heatmap</h2>
+    <div class="calbar"><div class="tabs" id="heatTabs" role="group" aria-label="Change period"><button data-p="1D" class="on">1D</button> <button data-p="1W">1W</button> <button data-p="1M">1M</button> <button data-p="3M">3M</button> <button data-p="6M">6M</button> <button data-p="YTD">YTD</button> <button data-p="1Y">1Y</button></div>
+      <span class="hscale"><span id="hLo"></span><i></i><span id="hHi"></span></span></div>
+    <div id="heat"></div>
     <h2>Signal calendar</h2>
     <div class="calbar"><label class="muted" for="calYear">Year</label> <select id="calYear"></select>
       <button id="calPrev" aria-label="Previous year">◀</button> <button id="calNext" aria-label="Next year">▶</button>
@@ -129,12 +132,9 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <div class="wrap"><table id="symTbl"></table></div>
     <h2>Trades on this symbol</h2>
     <div class="wrap" style="max-height:360px;overflow:auto"><table id="trades"></table></div>
-    <h2>By category</h2>
-    <div class="wrap"><table id="catTbl"></table></div>
-    <h2>By EMA gap at entry</h2>
-    <div class="wrap"><table id="gapTbl"></table></div>
-    <p class="muted" style="font-size:12px;margin-top:24px">Daily OHLC from Yahoo Finance (total return for ETFs), loaded live from the sector-terminal repo, which refreshes weekly. TradingView has no public data API, so the TradingView tab is its chart widget only. No costs included. Today's ETF list, so survivorship bias. Not investment advice.</p>
+    <p class="muted" style="font-size:12px;margin-top:24px">Daily OHLC from Yahoo Finance (total return for ETFs), loaded live: ETFs from the sector-terminal repo, US stocks (about 3 years, split and dividend adjusted) from this repo's data branch. Stocks have too little history for weekly or monthly EMA 300s, so they show on daily candles only and are not in the signal calendar. TradingView has no public data API, so the TradingView tab is its chart widget only. No costs included. Today's ETF list, so survivorship bias. Not investment advice.</p>
   </section>
+  <aside id="watch" aria-label="Watchlist"><h2>Watchlist</h2><div id="wlist"></div></aside>
 </main>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="strategy.js"></script>

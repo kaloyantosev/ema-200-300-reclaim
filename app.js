@@ -1,9 +1,12 @@
 const DATA = "https://raw.githubusercontent.com/kaloyantosev/sector-terminal/main/public/data/daily/";
+// data branch, rebuilt every weekday by .github/workflows/refresh-stocks.yml: stock prices + fresh summary/screener files
+const BASE = "https://raw.githubusercontent.com/kaloyantosev/ema-200-300-reclaim/data/";
 const H = Object.keys(HORIZONS);
 const $ = (id) => document.getElementById(id);
 const pct = (v, d = 2) => v == null || isNaN(v) ? "–" : `<span class="${v > 0 ? "pos" : v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v.toFixed(d)}%</span>`;
-let S, chart, current, tab = "chart", dir = "long", EV = [], byWeek = new Map(), calYear, calWeek;
-let SCR = [], tf = "D", chartTf = "D", sortK = "ago", sortDir = 1, agoUnit = "D";
+let S, chart, current, tab = "chart", EV = [], byWeek = new Map(), calYear, calWeek;
+let ALL = [], tf = "D", chartTf = "D", sortK = "ago", sortDir = 1, agoUnit = "D", heatP = "1D";
+const MAX_ROWS = 500;  // shortcut: renders the first 500 matches only, add paging if people need to scroll past that
 const rawCache = {};
 const TF_NAME = { D: "daily", W: "weekly", M: "monthly" }, TF_UNIT = { D: "d", W: "w", M: "mo" };
 const daysAgo = (x) => x.last ? Math.round((Date.parse(x.asOf) - Date.parse(x.last.date)) / 864e5) : null;  // calendar days to the data's last session
@@ -21,7 +24,8 @@ function screenRows() {
   const pos = document.querySelector("input[name=pos]:checked").value;
   const sig = $("fSig").value, agoTxt = $("fAgo").value, ago = agoTxt === "" ? null : +agoTxt;
   const arm = $("fArm").value, cat = $("fCat").value, q = $("fq").value.trim().toLowerCase(), noFlat = $("fFlat").checked;
-  return S.symbols.map((s, i) => ({ s, x: SCR[i][tf] })).filter(({ s, x }) => x && (!pos || x.pos === pos)
+  const kind = document.querySelector("input[name=kind]:checked").value;
+  return ALL.map((s) => ({ s, x: s.x[tf] })).filter(({ s, x }) => x && (!kind || s.type === kind) && (!pos || x.pos === pos)
     && (!sig || (x.last && x.last.dir === sig)) && (ago === null || (x.last && x.last.date >= cutoff(x.asOf, ago, agoUnit)))
     && (!arm || (arm === "L" ? x.aL : x.aS)) && (!noFlat || !x.flat) && (!cat || s.category === cat)
     && (!q || `${s.tv} ${s.name}`.toLowerCase().includes(q)));
@@ -31,16 +35,17 @@ const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, st: (r) =>
 function renderScreener() {
   const rows = screenRows(), f = SORT[sortK];
   rows.sort((a, b) => { const p = f(a), q = f(b); return p === q ? 0 : p === null ? 1 : q === null ? -1 : (p < q ? -1 : 1) * sortDir; });  // blanks last
-  const missing = SCR.filter((x) => !x[tf]).length;
-  $("fCount").textContent = `${rows.length} of ${S.symbols.length} indexes on ${TF_NAME[tf]} candles` +
-    (missing ? ` · ${missing} not shown: too little history for an EMA 300 on ${TF_NAME[tf]} candles` : "");
+  const missing = ALL.filter((s) => !s.x[tf]).length;
+  $("fCount").textContent = `${rows.length.toLocaleString()} of ${ALL.length.toLocaleString()} symbols on ${TF_NAME[tf]} candles` +
+    (rows.length > MAX_ROWS ? ` · showing the first ${MAX_ROWS}, narrow the filters to see the rest` : "") +
+    (missing ? ` · ${missing.toLocaleString()} not shown: too little history for an EMA 300 on ${TF_NAME[tf]} candles` : "");
   const th = (k, t) => `<th data-k="${k}" tabindex="0" aria-sort="${sortK === k ? (sortDir > 0 ? "ascending" : "descending") : "none"}">${t}${sortK === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`;
-  $("scrTbl").innerHTML = `<tr>${th("sym", "Symbol")}${th("name", "Name")}${th("st", "Stretch vs EMA 200")}` +
+  $("scrTbl").innerHTML = `<tr><th aria-label="Watchlist"></th>${th("sym", "Symbol")}${th("name", "Name")}<th>Type</th>${th("st", "Stretch vs EMA 200")}` +
     `${th("sig", "Last signal")}<th>Signal date</th>${th("ago", "Days ago")}${th("arm", "Armed")}<th>Flat</th></tr>` +
-    (rows.length ? rows.map(({ s, x }) => `<tr data-f="${s.file}" title="Open ${TF_NAME[tf]} chart"><td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td>${pct(x.st, 1)}</td>` +
+    (rows.length ? rows.slice(0, MAX_ROWS).map(({ s, x }) => `<tr data-f="${s.i}" title="Open ${TF_NAME[tf]} chart">${starBtn(s)}<td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td class="muted">${s.type === "etf" ? "ETF" : "Stock"}</td><td>${pct(x.st, 1)}</td>` +
       `<td class="${x.last?.dir === "long" ? "pos" : "neg"}">${x.last ? x.last.dir : "–"}</td><td>${x.last ? x.last.date : "–"}</td><td>${x.last ? daysAgo(x) : "–"}</td>` +
       `<td>${[x.aL ? "long" : "", x.aS ? "short" : ""].filter(Boolean).join(", ") || "–"}</td><td>${x.flat ? "yes" : ""}</td></tr>`).join("")
-      : `<tr><td class="muted" colspan="8">No index matches these filters.</td></tr>`);
+      : `<tr><td class="muted" colspan="10">Nothing matches these filters.</td></tr>`);
 }
 function setChartTf(t) {
   chartTf = t;
@@ -57,17 +62,39 @@ function horizonTable(rows) { // rows: [label, statsByHorizon]
     line("Trades", (s) => s.n, h)).join("");
 }
 
-function summaryTable(groups, label) {
-  return `<tr><th>${label}</th><th>Signals</th>${H.map((h) => `<th>avg ${h}</th>`).join("")}<th>% pos 12w</th></tr>` +
-    Object.entries(groups).map(([k, g]) => `<tr><td>${k}</td><td>${g.signals}</td>${H.map((h) => `<td>${pct(g.h[h].avg)}</td>`).join("")}<td>${g.h["12w"].win ?? "–"}%</td></tr>`).join("");
+// ---- watchlist: starred symbols, kept in this browser only
+const WKEY = "ema-watchlist";
+let watch = new Set();
+try { watch = new Set(JSON.parse(localStorage.getItem(WKEY) || "[]")); } catch { /* storage blocked: watchlist lasts this visit */ }
+const starBtn = (s) => `<td><button class="star${watch.has(s.key) ? " on" : ""}" data-star="${s.key}" aria-pressed="${watch.has(s.key)}" aria-label="${watch.has(s.key) ? "Remove" : "Add"} ${s.tv || s.file} ${watch.has(s.key) ? "from" : "to"} watchlist">${watch.has(s.key) ? "★" : "☆"}</button></td>`;
+function toggleWatch(key) {
+  watch.has(key) ? watch.delete(key) : watch.add(key);
+  try { localStorage.setItem(WKEY, JSON.stringify([...watch])); } catch { /* not saved */ }
+  renderWatch(); renderScreener();
+}
+function renderWatch() {
+  const list = ALL.filter((s) => watch.has(s.key));
+  $("wlist").innerHTML = list.length ? list.map((s) => `<div class="wl"><span><b>${s.tv || s.file}</b> ${pct(s.x.chg?.["1D"], 1)}<br><small>${s.name}</small></span>` +
+    `<button class="star on" data-star="${s.key}" aria-label="Remove ${s.tv || s.file} from watchlist">★</button></div>`).join("")
+    : `<div class="wl muted">Star a symbol in the filter console to add it here.</div>`;
 }
 
-function renderList(filter = "") {
-  const f = filter.toLowerCase(), byCat = {};
-  for (const s of S.symbols) if (!f || (s.tv + s.name).toLowerCase().includes(f)) (byCat[s.category] ??= []).push(s);
-  $("list").innerHTML = Object.entries(byCat).map(([c, list]) => `<div class="cat">${c}</div>` + list.map((s) =>
-    `<div class="sym${current === s ? " on" : ""}" data-f="${s.file}" title="${s.name}"><span>${s.tv || s.file}<br><span class="muted" style="font-size:11px">${s.name}</span></span>` +
-    `<span class="n">${dir === "long" ? s.nL : s.nS} sig<br>12w ${pct(dir === "long" ? s.aL : s.aS, 1)}</span></div>`).join("")).join("");
+// ---- heatmap: every index's price change, dark near 0, bright at the period's cap
+const HEAT_CAP = { "1D": 3, "1W": 6, "1M": 10, "3M": 20, "6M": 30, "YTD": 40, "1Y": 50 };
+const HEAT_STOPS = [[255, 43, 43], [139, 46, 53], [58, 61, 71], [36, 112, 63], [24, 224, 90]];  // bright red, dark red, grey, dark green, bright green
+function heatColor(v) {
+  if (v == null) return "rgb(58,61,71)";
+  const t = (Math.max(-1, Math.min(1, v / HEAT_CAP[heatP])) + 1) * 2, k = Math.min(3, Math.floor(t)), f = t - k;
+  return `rgb(${HEAT_STOPS[k].map((c, j) => Math.round(c + (HEAT_STOPS[k + 1][j] - c) * f)).join(",")})`;
+}
+function renderHeat() {
+  const byCat = {};
+  for (const s of ALL) if (s.type === "etf") (byCat[s.category] ??= []).push(s);
+  const v = (s) => s.x.chg?.[heatP] ?? null;
+  $("hLo").textContent = `−${HEAT_CAP[heatP]}%`; $("hHi").textContent = `+${HEAT_CAP[heatP]}%`;
+  $("heat").innerHTML = Object.keys(byCat).sort().map((c) => `<div><div class="hcat">${c}</div><div class="hgrid">` +
+    byCat[c].sort((a, b) => (v(b) ?? -1e9) - (v(a) ?? -1e9)).map((s) => `<button class="tile" data-f="${s.i}" style="background:${heatColor(v(s))}" title="${s.name}: open chart">` +
+      `<b>${(s.tv || s.file).split(":").pop()}</b>${v(s) == null ? "–" : (v(s) > 0 ? "+" : "") + v(s).toFixed(2) + "%"}</button>`).join("") + `</div></div>`).join("");
 }
 
 function ensureChart() {
@@ -90,19 +117,19 @@ function showTV(s) {
 }
 
 async function select(s) {
-  current = s; renderList($("q").value);
+  current = s;
   $("symTitle").textContent = `${s.tv || s.file} · ${s.name}`;
   $("tvlink").href = s.tv ? `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(s.tv)}` : "#";
   $("symTbl").innerHTML = "";
   $("trades").innerHTML = "<tr><td>Loading prices…</td></tr>";
   showTV(s);
-  try { rawCache[s.file] ??= await (await fetch(DATA + s.file)).json(); } catch (e) { $("trades").innerHTML = `<tr><td>Could not load ${s.file}: ${e.message}</td></tr>`; return; }
+  try { rawCache[s.key] ??= await (await fetch(s.url)).json(); } catch (e) { $("trades").innerHTML = `<tr><td>Could not load ${s.file}: ${e.message}</td></tr>`; return; }
   if (current !== s) return;
   drawSymbol(s);
 }
 
 function drawSymbol(s) {
-  const d = resample(rawCache[s.file], chartTf), daily = chartTf === "D", unit = TF_UNIT[chartTf];
+  const d = resample(rawCache[s.key], chartTf), daily = chartTf === "D", unit = TF_UNIT[chartTf];
   const r = runStrategy(d), c = ensureChart();
   const symStats = (ev) => { const h = {};
   for (const [k, n] of Object.entries(HORIZONS)) {
@@ -168,26 +195,29 @@ function renderWeek() {
   const list = byWeek.get(`${calYear}-${calWeek}`) || [], mon = weekMonday(calYear, calWeek);
   $("weekTitle").textContent = `Week ${calWeek}, ${calYear} (${md(mon)} – ${md(new Date(mon.getTime() + 4 * DAY))}): ${list.length} signal${list.length === 1 ? "" : "s"}`;
   $("weekTbl").innerHTML = list.length ? `<tr><th>Date</th><th>Symbol</th><th>Name</th><th>Category</th><th>Side</th>${H.map((h) => `<th>${h}</th>`).join("")}<th>Stopped after</th></tr>` +
-    list.map((e) => { const s = S.symbols[e[1]];
-      return `<tr data-f="${s.file}" title="Open chart"><td>${e[0]}</td><td>${s.tv || s.file}</td><td>${s.name}</td><td>${s.category}</td>` +
+    list.map((e) => { const s = ALL[e[1]];
+      return `<tr data-f="${s.i}" title="Open chart"><td>${e[0]}</td><td>${s.tv || s.file}</td><td>${s.name}</td><td>${s.category}</td>` +
         `<td class="${e[2] === 1 ? "pos" : "neg"}">${e[2] === 1 ? "long" : "short"}</td>${H.map((h, k) => `<td>${e[3 + k] == null ? "–" : pct(e[3 + k], 1)}</td>`).join("")}` +
         `<td>${e[3 + H.length] == null ? "not stopped" : e[3 + H.length] + " d"}</td></tr>`; }).join("")
     : `<tr><td class="muted">No signals this week.</td></tr>`;
 }
 
-function renderSummary() {
-  const B = S[dir], name = dir === "long" ? "Longs" : "Shorts";
-  $("kpis").innerHTML = [[`${name}: signals`, B.total_signals.toLocaleString()], ["Ever stopped", B.stopped_ever + "%"], ["Median days to stop", B.median_days_to_stop],
-    ["Avg 4w / 20w", `${B.all["4w"].avg}% / ${B.all["20w"].avg}%`]].map(([k, v]) => `<div class="box"><span class="muted">${k}</span><b>${v}</b></div>`).join("");
-  $("allTbl").innerHTML = horizonTable([[`${name}, all symbols`, B.all], [`${name}, pure price indexes only`, B.index_only]]);
-  $("catTbl").innerHTML = summaryTable(B.categories, `Category (${name.toLowerCase()})`);
-  $("gapTbl").innerHTML = summaryTable(Object.fromEntries(Object.entries(B.gap).map(([k, g]) => [`${k} (${g.range[0]}–${g.range[1]}%)`, g])), `Gap tercile (${name.toLowerCase()})`);
-  renderList($("q").value);
-}
-
 (async () => {
-  [S, EV, SCR] = await Promise.all(["summary.json", "events.json", "screener.json"].map((f) => fetch(f).then((r) => r.json())));
-  $("fCat").innerHTML += [...new Set(S.symbols.map((s) => s.category))].sort().map((c) => `<option>${c}</option>`).join("");
+  const load = (base) => Promise.all(["summary.json", "events.json", "screener.json"].map((f) => fetch(base + f).then((r) => { if (!r.ok) throw r.status; return r.json(); })));
+  let SCR;
+  try { [S, EV, SCR] = await load(BASE); } catch { [S, EV, SCR] = await load(""); }  // data branch not built yet: files deployed with the site
+  const STK = await fetch(BASE + "stocks.json").then((r) => r.ok ? r.json() : []).catch(() => []);
+  // ETFs first, so ALL[i] matches the symbol index i in events.json
+  ALL = [...S.symbols.map((s, i) => ({ ...s, type: "etf", x: SCR[i], url: DATA + s.file })),
+    ...STK.map((s) => ({ ...s, type: "stock", category: "US Stock", url: BASE + "stocks/" + s.file }))];
+  ALL.forEach((s, i) => { s.i = i; s.key = s.type + ":" + s.file; });
+  $("fCat").innerHTML += [...new Set(ALL.map((s) => s.category))].sort().map((c) => `<option>${c}</option>`).join("");
+  renderHeat(); renderWatch();
+  $("heatTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; heatP = b.dataset.p;
+    document.querySelectorAll("#heatTabs button").forEach((x) => x.classList.toggle("on", x === b)); renderHeat(); });
+  const openRow = (e) => { const el = e.target.closest("[data-f]"); if (!el) return; select(ALL[+el.dataset.f]); $("symTitle").scrollIntoView({ behavior: "smooth" }); };
+  $("heat").addEventListener("click", openRow);
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-star]"); if (b) { e.stopPropagation(); toggleWatch(b.dataset.star); } }, true);
   renderScreener();
   document.querySelector(".console").addEventListener("input", renderScreener);
   $("agoUnit").addEventListener("click", (e) => { const b = e.target.closest("button[data-u]"); if (!b) return; agoUnit = b.dataset.u;
@@ -197,11 +227,10 @@ function renderSummary() {
   const sortBy = (e) => { const t = e.target.closest("th[data-k]"); if (!t) return;
     sortDir = sortK === t.dataset.k ? -sortDir : 1; sortK = t.dataset.k; renderScreener(); };
   $("scrTbl").addEventListener("click", (e) => { if (e.target.closest("th[data-k]")) return sortBy(e);
-    const tr = e.target.closest("tr[data-f]"); if (!tr) return;
-    setChartTf(tf); select(S.symbols.find((s) => s.file === tr.dataset.f)); $("symTitle").scrollIntoView({ behavior: "smooth" }); });
+    if (!e.target.closest("tr[data-f]")) return; setChartTf(tf); openRow(e); });
   $("scrTbl").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(e); } });
   $("chartTf").addEventListener("click", (e) => { const b = e.target.closest("button[data-ctf]"); if (!b || !current) return;
-    setChartTf(b.dataset.ctf); if (rawCache[current.file]) drawSymbol(current); });
+    setChartTf(b.dataset.ctf); if (rawCache[current.key]) drawSymbol(current); });
   for (const e of EV) { const k = isoWeek(e[0]).join("-"); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(e); }
   [calYear, calWeek] = isoWeek(EV.at(-1)[0]);
   renderCal();
@@ -212,17 +241,8 @@ function renderSummary() {
   $("calNext").addEventListener("click", () => stepYear(1));
   $("calGrid").addEventListener("click", (e) => { const b = e.target.closest(".wk"); if (!b) return; calWeek = +b.dataset.w;
     document.querySelectorAll(".wk").forEach((x) => x.classList.toggle("on", x === b)); renderWeek(); });
-  $("weekTbl").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-f]"); if (!tr) return;
-    select(S.symbols.find((s) => s.file === tr.dataset.f)); $("symTitle").scrollIntoView({ behavior: "smooth" }); });
-  $("sub").textContent = `${S.symbols.length} symbols · ${S.long.total_signals.toLocaleString()} long + ${S.short.total_signals.toLocaleString()} short signals · ${S.first} to ${S.last} · data as of ${S.asOf}`;
-  renderSummary();
-  document.querySelectorAll("#dirTabs button").forEach((b) => b.addEventListener("click", () => {
-    dir = b.dataset.d;
-    document.querySelectorAll("#dirTabs button").forEach((x) => x.classList.toggle("on", x === b));
-    renderSummary();
-  }));
-  $("q").addEventListener("input", (e) => renderList(e.target.value));
-  $("list").addEventListener("click", (e) => { const el = e.target.closest(".sym"); if (el) select(S.symbols.find((s) => s.file === el.dataset.f)); });
+  $("weekTbl").addEventListener("click", openRow);
+  $("sub").textContent = `${S.symbols.length} indexes + ${STK.length.toLocaleString()} US stocks · index signals: ${S.long.total_signals.toLocaleString()} long + ${S.short.total_signals.toLocaleString()} short signals · ${S.first} to ${S.last} · data as of ${S.asOf}`;
   document.querySelectorAll(".tabs button[data-t]").forEach((b) => b.addEventListener("click", () => {
     tab = b.dataset.t;
     document.querySelectorAll(".tabs button[data-t]").forEach((x) => x.classList.toggle("on", x === b));
@@ -232,5 +252,5 @@ function renderSummary() {
       else showTV(current);
     }
   }));
-  select(S.symbols.find((s) => s.file === "_GSPC.json") || S.symbols[0]);
+  select(ALL.find((s) => s.file === "_GSPC.json") || ALL[0]);
 })();
