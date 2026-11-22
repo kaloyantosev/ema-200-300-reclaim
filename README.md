@@ -24,9 +24,9 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - `mailer/daily_signals.py`: daily mail (10:00 Europe/Sofia, weekdays, `.github/workflows/signal-mail.yml`) with the indexes that signalled on the last session and the 5 large/mid/small cap S&P 1500 stocks in each sector with the highest relative volume. Needs repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_TO`. Preview: `python ema-cross/mailer/daily_signals.py --dry-run`.
 - `tradingview/ema200_stretch_oscillator.pine`: oscillator of price stretch vs the EMA 200, coloured by how extreme it is for that symbol.
 
-## US stocks
+## US stocks and extra ETFs
 
-`scripts/fetch_stocks.py` downloads about 3 years of daily prices for every US-listed common stock (ticker list from nasdaqtrader.com, prices from Yahoo Finance). `STOCKS=out/stocks node build.mjs` adds their screener rows (`stocks.json`). The workflow `.github/workflows/refresh-stocks.yml` runs both every weekday and force-pushes the result to the `data` branch, which the site reads at runtime. Stocks show on daily candles only and are not in the signal calendar.
+`scripts/fetch_stocks.py` downloads the full price history of every US-listed common stock (ticker list from nasdaqtrader.com) plus the ETFs in its `EXTRA_ETFS` list (tech niches and rotation funds sector-terminal does not track), from Yahoo Finance. Each file holds the last ~3 years of daily candles plus full-history weekly and monthly candles. `STOCKS=out/stocks node build.mjs` adds their screener rows (`stocks.json`) and writes `heat.json` (a year of daily closes for the heatmap slider). The workflow `.github/workflows/refresh-stocks.yml` runs both every weekday and force-pushes the result to the `data` branch, which the site reads at runtime. These symbols are not in the signal calendar.
 
 ## Run
 

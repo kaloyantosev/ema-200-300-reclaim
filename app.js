@@ -79,7 +79,31 @@ function renderWatch() {
     : `<div class="wl muted">Star a symbol in the filter console to add it here.</div>`;
 }
 
-// ---- heatmap: every index's price change, dark near 0, bright at the period's cap
+// ---- heatmap: every ETF / index's price change on the slider's day, dark near 0, bright at the period's cap
+// heat.json (build.mjs): S&P 500 session dates + each symbol's close on them, so any day's 1D...1Y change is available
+let HEAT = null, heatI = 0, heatTimer = null;
+const HEAT_BACK = { "1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252 };
+function heatVal(s) {
+  const c = HEAT?.c[s.key];
+  if (!c) return !HEAT || heatI === HEAT.dates.length - 1 ? s.x.chg?.[heatP] ?? null : null;
+  const y = HEAT.dates[heatI].slice(0, 4);
+  const j = heatP === "YTD" ? HEAT.dates.findLastIndex((t) => t.slice(0, 4) < y) : heatI - HEAT_BACK[heatP];
+  return j >= 0 && c[heatI] != null && c[j] != null ? (c[heatI] / c[j] - 1) * 100 : null;
+}
+function setHeatDay(i) {
+  heatI = Math.max(+$("heatSlider").min, Math.min(HEAT.dates.length - 1, i));
+  $("heatSlider").value = heatI;
+  const d = new Date(HEAT.dates[heatI] + "T00:00:00Z");
+  $("heatDate").textContent = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) +
+    (heatI === HEAT.dates.length - 1 ? " (latest)" : "");
+  renderHeat();
+}
+function playHeat() {
+  if (heatTimer) { clearInterval(heatTimer); heatTimer = null; $("heatPlay").textContent = "▶ Play"; return; }
+  if (heatI >= HEAT.dates.length - 1) setHeatDay(+$("heatSlider").min);
+  $("heatPlay").textContent = "❚❚ Pause";
+  heatTimer = setInterval(() => { if (heatI >= HEAT.dates.length - 1) return playHeat(); setHeatDay(heatI + 1); }, 300);
+}
 const HEAT_CAP = { "1D": 3, "1W": 6, "1M": 10, "3M": 20, "6M": 30, "YTD": 40, "1Y": 50 };
 const HEAT_STOPS = [[255, 43, 43], [139, 46, 53], [58, 61, 71], [36, 112, 63], [24, 224, 90]];  // bright red, dark red, grey, dark green, bright green
 function heatColor(v) {
@@ -90,7 +114,7 @@ function heatColor(v) {
 function renderHeat() {
   const byCat = {};
   for (const s of ALL) if (s.type === "etf") (byCat[s.category] ??= []).push(s);
-  const v = (s) => s.x.chg?.[heatP] ?? null;
+  const v = heatVal;
   $("hLo").textContent = `−${HEAT_CAP[heatP]}%`; $("hHi").textContent = `+${HEAT_CAP[heatP]}%`;
   $("heat").innerHTML = Object.keys(byCat).sort().map((c) => `<div><div class="hcat">${c}</div><div class="hgrid">` +
     byCat[c].sort((a, b) => (v(b) ?? -1e9) - (v(a) ?? -1e9)).map((s) => `<button class="tile" data-f="${s.i}" style="background:${heatColor(v(s))}" title="${s.name}: open chart">` +
@@ -129,7 +153,8 @@ async function select(s) {
 }
 
 function drawSymbol(s) {
-  const d = resample(rawCache[s.key], chartTf), daily = chartTf === "D", unit = TF_UNIT[chartTf];
+  // stock files carry full-history W / M candles
+  const raw = rawCache[s.key], d = chartTf === "D" ? raw : raw[chartTf] ?? resample(raw, chartTf), daily = chartTf === "D", unit = TF_UNIT[chartTf];
   const r = runStrategy(d), c = ensureChart();
   const symStats = (ev) => { const h = {};
   for (const [k, n] of Object.entries(HORIZONS)) {
@@ -205,14 +230,24 @@ function renderWeek() {
 (async () => {
   const load = (base) => Promise.all(["summary.json", "events.json", "screener.json"].map((f) => fetch(base + f).then((r) => { if (!r.ok) throw r.status; return r.json(); })));
   let SCR;
-  try { [S, EV, SCR] = await load(BASE); } catch { [S, EV, SCR] = await load(""); }  // data branch not built yet: files deployed with the site
+  let base = BASE;
+  try { [S, EV, SCR] = await load(BASE); } catch { base = ""; [S, EV, SCR] = await load(""); }  // data branch not built yet: files deployed with the site
+  HEAT = await fetch(base + "heat.json").then((r) => r.ok ? r.json() : null).catch(() => null);
   const STK = await fetch(BASE + "stocks.json").then((r) => r.ok ? r.json() : []).catch(() => []);
   // ETFs first, so ALL[i] matches the symbol index i in events.json
   ALL = [...S.symbols.map((s, i) => ({ ...s, type: "etf", x: SCR[i], url: DATA + s.file })),
-    ...STK.map((s) => ({ ...s, type: "stock", category: "US Stock", url: BASE + "stocks/" + s.file }))];
+    ...STK.map((s) => ({ type: "stock", category: "US Stock", ...s, url: BASE + "stocks/" + s.file }))];
   ALL.forEach((s, i) => { s.i = i; s.key = s.type + ":" + s.file; });
   $("fCat").innerHTML += [...new Set(ALL.map((s) => s.category))].sort().map((c) => `<option>${c}</option>`).join("");
-  renderHeat(); renderWatch();
+  if (HEAT) {
+    $("heatSlider").min = Math.min(HEAT_BACK["1Y"], HEAT.dates.length - 1); $("heatSlider").max = HEAT.dates.length - 1;
+    $("heatSlider").addEventListener("input", (e) => setHeatDay(+e.target.value));
+    $("heatPrev").addEventListener("click", () => setHeatDay(heatI - 1));
+    $("heatNext").addEventListener("click", () => setHeatDay(heatI + 1));
+    $("heatPlay").addEventListener("click", playHeat);
+    setHeatDay(HEAT.dates.length - 1);
+  } else { $("heatDay").hidden = true; renderHeat(); }
+  renderWatch();
   $("heatTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; heatP = b.dataset.p;
     document.querySelectorAll("#heatTabs button").forEach((x) => x.classList.toggle("on", x === b)); renderHeat(); });
   const openRow = (e) => { const el = e.target.closest("[data-f]"); if (!el) return; select(ALL[+el.dataset.f]); $("symTitle").scrollIntoView({ behavior: "smooth" }); };

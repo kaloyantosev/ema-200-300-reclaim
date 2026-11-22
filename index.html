@@ -116,6 +116,9 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <h2>Heatmap</h2>
     <div class="calbar"><div class="tabs" id="heatTabs" role="group" aria-label="Change period"><button data-p="1D" class="on">1D</button> <button data-p="1W">1W</button> <button data-p="1M">1M</button> <button data-p="3M">3M</button> <button data-p="6M">6M</button> <button data-p="YTD">YTD</button> <button data-p="1Y">1Y</button></div>
       <span class="hscale"><span id="hLo"></span><i></i><span id="hHi"></span></span></div>
+    <div class="calbar" id="heatDay"><button id="heatPrev" aria-label="Previous day">◀</button>
+      <input type="range" id="heatSlider" step="1" aria-label="Heatmap day" style="flex:1;min-width:160px;accent-color:var(--accent)">
+      <button id="heatNext" aria-label="Next day">▶</button> <button id="heatPlay">▶ Play</button> <b id="heatDate" aria-live="polite"></b></div>
     <div id="heat"></div>
     <h2>Signal calendar</h2>
     <div class="calbar"><label class="muted" for="calYear">Year</label> <select id="calYear"></select>
@@ -132,7 +135,7 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <div class="wrap"><table id="symTbl"></table></div>
     <h2>Trades on this symbol</h2>
     <div class="wrap" style="max-height:360px;overflow:auto"><table id="trades"></table></div>
-    <p class="muted" style="font-size:12px;margin-top:24px">Daily OHLC from Yahoo Finance (total return for ETFs), loaded live: ETFs from the sector-terminal repo, US stocks (about 3 years, split and dividend adjusted) from this repo's data branch. Stocks have too little history for weekly or monthly EMA 300s, so they show on daily candles only and are not in the signal calendar. TradingView has no public data API, so the TradingView tab is its chart widget only. No costs included. Today's ETF list, so survivorship bias. Not investment advice.</p>
+    <p class="muted" style="font-size:12px;margin-top:24px">Daily OHLC from Yahoo Finance (total return for ETFs), loaded live: ETFs from the sector-terminal repo, US stocks and the extra ETFs (full history, split and dividend adjusted; charts show the last 3 years of daily candles) from this repo's data branch. Weekly EMA 300s need about 6 years of history and monthly ones about 25, so younger stocks drop out of those timeframes. Stocks and extra ETFs are not in the signal calendar. TradingView has no public data API, so the TradingView tab is its chart widget only. No costs included. Today's ETF list, so survivorship bias. Not investment advice.</p>
   </section>
   <aside id="watch" aria-label="Watchlist"><h2>Watchlist</h2><div id="wlist"></div></aside>
 </main>

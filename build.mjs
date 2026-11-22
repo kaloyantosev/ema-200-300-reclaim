@@ -54,7 +54,7 @@ function changes(d) {
 function screen(d) {
   const out = { chg: changes(d) };
   for (const tf of ["D", "W", "M"]) {
-    const x = resample(d, tf), i = x.close.length - 1;
+    const x = tf === "D" ? d : d[tf] ?? resample(d, tf), i = x.close.length - 1;  // stock files carry full-history W / M candles
     if (i <= WARMUP) { out[tf] = null; continue; }
     const r = runStrategy(x), hc = r.hc[i], a = r.e200[i], b = r.e300[i], last = r.events.at(-1);
     out[tf] = {
@@ -68,7 +68,7 @@ function screen(d) {
 }
 const results = await Promise.all(list.map(async (s) => {
   const d = await load("daily/" + s.file);
-  return { s, ev: runStrategy(d).events, scr: screen(d) };
+  return { s, ev: runStrategy(d).events, scr: screen(d), d };
 }));
 const a12 = (ev) => r2(mean(ev.filter((e) => e["12w"] != null).map((e) => e["12w"])) * 100, 2);
 const symbols = [], all = [];
@@ -110,14 +110,28 @@ if (SRC) {
   if (!page.includes("<head>")) throw new Error("index.html has no <head>");
   writeFileSync(new URL("../index.html", import.meta.url), page.replace("<head>", '<head>\n<base href="ema-cross/">'));
 }
-// US stocks (scripts/fetch_stocks.py): screener rows only, no backtest or calendar. STOCKS=<dir> node build.mjs
+// Heatmap history: daily closes of every ETF / index on the S&P 500's last HEAT_DAYS sessions (carried forward over
+// other markets' holidays), so the page can show any day's 1D...1Y change. Keys match the page's symbol keys.
+const HEAT_DAYS = 520;  // ~1 year of slider days + a 1-year lookback
+const master = (results.find((r) => r.s.file === "_GSPC.json") ?? results[0]).d.dates.slice(-HEAT_DAYS);
+const heat = { dates: master, c: {} };
+const addHeat = (key, d) => {
+  let j = -1;
+  heat.c[key] = master.map((t) => { while (j + 1 < d.dates.length && d.dates[j + 1] <= t) j++; return j < 0 ? null : d.close[j]; });
+};
+for (const { s, d } of results) addHeat("etf:" + s.file, d);
+
+// US stocks and extra ETFs (scripts/fetch_stocks.py): screener rows only, no backtest or calendar. STOCKS=<dir> node build.mjs
 if (process.env.STOCKS) {
   const dir = process.env.STOCKS, rows = [];
   for (const s of JSON.parse(readFileSync(`${dir}/_list.json`, "utf8"))) {
-    const x = screen(JSON.parse(readFileSync(`${dir}/${s.t}.json`, "utf8")));
-    if (x.D) rows.push({ file: s.t + ".json", tv: s.tv, name: s.n, x });
+    const d = JSON.parse(readFileSync(`${dir}/${s.t}.json`, "utf8")), x = screen(d), type = s.type ?? "stock";
+    if (!x.D) continue;
+    rows.push({ file: s.t + ".json", tv: s.tv, name: s.n, type, category: s.cat ?? "US Stock", x });
+    if (type === "etf") addHeat("etf:" + s.t + ".json", d);
   }
   writeFileSync(new URL("./stocks.json", import.meta.url), JSON.stringify(rows));
-  console.log(`stocks.json: ${rows.length} stocks`);
+  console.log(`stocks.json: ${rows.filter((r) => r.type === "stock").length} stocks, ${rows.filter((r) => r.type === "etf").length} extra ETFs`);
 }
+writeFileSync(new URL("./heat.json", import.meta.url), JSON.stringify(heat));
 console.log(`summary.json: ${symbols.length} symbols, ${summary.long.total_signals} long + ${summary.short.total_signals} short signals, data as of ${uni.asOf}`);
