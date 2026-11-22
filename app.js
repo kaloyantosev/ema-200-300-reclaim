@@ -30,7 +30,7 @@ function screenRows() {
     && (!arm || (arm === "L" ? x.aL : x.aS)) && (!noFlat || !x.flat) && (!cat || s.category === cat)
     && (!q || `${s.tv} ${s.name}`.toLowerCase().includes(q)));
 }
-const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, st: (r) => r.x.st,
+const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, ytd: (r) => r.s.x.chg?.YTD ?? null,
   sig: (r) => r.x.last?.dir ?? null, ago: (r) => daysAgo(r.x), arm: (r) => (r.x.aL ? "long" : "") + (r.x.aS ? "short" : "") || null };
 function renderScreener() {
   const rows = screenRows(), f = SORT[sortK];
@@ -40,9 +40,9 @@ function renderScreener() {
     (rows.length > MAX_ROWS ? ` · showing the first ${MAX_ROWS}, narrow the filters to see the rest` : "") +
     (missing ? ` · ${missing.toLocaleString()} not shown: too little history for an EMA 300 on ${TF_NAME[tf]} candles` : "");
   const th = (k, t) => `<th data-k="${k}" tabindex="0" aria-sort="${sortK === k ? (sortDir > 0 ? "ascending" : "descending") : "none"}">${t}${sortK === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`;
-  $("scrTbl").innerHTML = `<tr><th aria-label="Watchlist"></th>${th("sym", "Symbol")}${th("name", "Name")}<th>Type</th>${th("st", "Stretch vs EMA 200")}` +
+  $("scrTbl").innerHTML = `<tr><th aria-label="Watchlist"></th>${th("sym", "Symbol")}${th("name", "Name")}<th>Type</th>${th("ytd", "YTD return")}` +
     `${th("sig", "Last signal")}<th>Signal date</th>${th("ago", "Days ago")}${th("arm", "Armed")}<th>Flat</th></tr>` +
-    (rows.length ? rows.slice(0, MAX_ROWS).map(({ s, x }) => `<tr data-f="${s.i}" title="Open ${TF_NAME[tf]} chart">${starBtn(s)}<td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td class="muted">${s.type === "etf" ? "ETF" : "Stock"}</td><td>${pct(x.st, 1)}</td>` +
+    (rows.length ? rows.slice(0, MAX_ROWS).map(({ s, x }) => `<tr data-f="${s.i}" title="Open ${TF_NAME[tf]} chart">${starBtn(s)}<td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td class="muted">${s.type === "etf" ? "ETF" : "Stock"}</td><td>${pct(s.x.chg?.YTD, 1)}</td>` +
       `<td class="${x.last?.dir === "long" ? "pos" : "neg"}">${x.last ? x.last.dir : "–"}</td><td>${x.last ? x.last.date : "–"}</td><td>${x.last ? daysAgo(x) : "–"}</td>` +
       `<td>${[x.aL ? "long" : "", x.aS ? "short" : ""].filter(Boolean).join(", ") || "–"}</td><td>${x.flat ? "yes" : ""}</td></tr>`).join("")
       : `<tr><td class="muted" colspan="10">Nothing matches these filters.</td></tr>`);
