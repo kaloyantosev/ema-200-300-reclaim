@@ -278,7 +278,7 @@ function renderWeek() {
   $("calGrid").addEventListener("click", (e) => { const b = e.target.closest(".wk"); if (!b) return; calWeek = +b.dataset.w;
     document.querySelectorAll(".wk").forEach((x) => x.classList.toggle("on", x === b)); renderWeek(); });
   $("weekTbl").addEventListener("click", openRow);
-  $("sub").textContent = `${S.symbols.length} indexes + ${STK.length.toLocaleString()} US stocks · index signals: ${S.long.total_signals.toLocaleString()} long + ${S.short.total_signals.toLocaleString()} short signals · ${S.first} to ${S.last} · data as of ${S.asOf}`;
+  $("sub").textContent = `${S.symbols.length + STK.filter((s) => s.type === "etf").length} ETFs / indexes + ${STK.filter((s) => s.type !== "etf").length.toLocaleString()} US stocks · index signals: ${S.long.total_signals.toLocaleString()} long + ${S.short.total_signals.toLocaleString()} short signals · ${S.first} to ${S.last} · data as of ${S.asOf}`;
   document.querySelectorAll(".tabs button[data-t]").forEach((b) => b.addEventListener("click", () => {
     tab = b.dataset.t;
     document.querySelectorAll(".tabs button[data-t]").forEach((x) => x.classList.toggle("on", x === b));
