@@ -232,7 +232,8 @@ function renderWeek() {
   let SCR;
   let base = BASE;
   try { [S, EV, SCR] = await load(BASE); } catch { base = ""; [S, EV, SCR] = await load(""); }  // data branch not built yet: files deployed with the site
-  HEAT = await fetch(base + "heat.json").then((r) => r.ok ? r.json() : null).catch(() => null);
+  const getHeat = (b) => fetch(b + "heat.json").then((r) => r.ok ? r.json() : null).catch(() => null);
+  HEAT = await getHeat(base) ?? (base ? await getHeat("") : null);  // data branch older than heat.json: use the deployed copy
   const STK = await fetch(BASE + "stocks.json").then((r) => r.ok ? r.json() : []).catch(() => []);
   // ETFs first, so ALL[i] matches the symbol index i in events.json
   ALL = [...S.symbols.map((s, i) => ({ ...s, type: "etf", x: SCR[i], url: DATA + s.file })),
@@ -246,7 +247,7 @@ function renderWeek() {
     $("heatNext").addEventListener("click", () => setHeatDay(heatI + 1));
     $("heatPlay").addEventListener("click", playHeat);
     setHeatDay(HEAT.dates.length - 1);
-  } else { $("heatDay").hidden = true; renderHeat(); }
+  } else { $("heatDay").style.display = "none"; renderHeat(); }  // .calbar's display:flex beats the hidden attribute
   renderWatch();
   $("heatTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; heatP = b.dataset.p;
     document.querySelectorAll("#heatTabs button").forEach((x) => x.classList.toggle("on", x === b)); renderHeat(); });
