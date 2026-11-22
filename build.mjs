@@ -2,7 +2,7 @@
 // Usage: node build.mjs [localDataDir]   (no arg = fetch from GitHub)
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-const { runStrategy, HORIZONS } = createRequire(import.meta.url)("./strategy.js");
+const { runStrategy, resample, HORIZONS, WARMUP } = createRequire(import.meta.url)("./strategy.js");
 
 const SRC = process.argv[2];
 const RAW = "https://raw.githubusercontent.com/kaloyantosev/sector-terminal/main/public/data/";
@@ -27,13 +27,44 @@ function stats(ev) {
 }
 const quantile = (s, q) => { const p = (s.length - 1) * q, lo = Math.floor(p); return s[lo] + (s[Math.ceil(p)] - s[lo]) * (p - lo); };
 
+// One index per industry (same rule as representatives() in backtest/ema_200_300_test.py): longest history wins
+const ALIASES = { "Technology": "Information Technology", "Energy / Oil & Gas": "Energy", "Europe Financials": "Financials",
+  "REITs": "Real Estate", "Real Estate ex-US": "Real Estate", "Housing / Real Estate": "Homebuilders" };
 const uni = await load("universe.json");
-const list = uni.sectors.filter((s) => !SKIP.has(s.file));
-const results = await Promise.all(list.map(async (s) => ({ s, ev: runStrategy(await load("daily/" + s.file)).events })));
+const best = new Map();
+for (const s of uni.sectors) {
+  if (SKIP.has(s.file)) continue;
+  const key = (s.category.startsWith("Macro") ? s.category : "equity") + "|" + (ALIASES[s.sector] ?? s.sector);
+  if (!best.has(key) || s.start_date < best.get(key).start_date) best.set(key, s);
+}
+const list = [...best.values()];
+// Screener: where each index stands now on daily, weekly and monthly candles (same rules on every timeframe).
+// pos: "A" HA close above both EMAs, "B" below both, "2" below EMA 200 only, "3" below EMA 300 only.
+// null: fewer than WARMUP + 2 candles on that timeframe (monthly needs about 25 years of history).
+function screen(d) {
+  const out = {};
+  for (const tf of ["D", "W", "M"]) {
+    const x = resample(d, tf), i = x.close.length - 1;
+    if (i <= WARMUP) { out[tf] = null; continue; }
+    const r = runStrategy(x), hc = r.hc[i], a = r.e200[i], b = r.e300[i], last = r.events.at(-1);
+    out[tf] = {
+      pos: hc > a && hc > b ? "A" : hc < a && hc < b ? "B" : hc < a ? "2" : "3",
+      st: r2((hc / a - 1) * 100, 2), gap: r2(Math.abs(a - b) / Math.min(a, b) * 100, 2),
+      aL: r.armLong, aS: r.armShort, flat: r.tangled, asOf: x.dates[i],
+      last: last ? { date: last.date, dir: last.dir, ago: i - last.i } : null,
+    };
+  }
+  return out;
+}
+const results = await Promise.all(list.map(async (s) => {
+  const d = await load("daily/" + s.file);
+  return { s, ev: runStrategy(d).events, scr: screen(d) };
+}));
 const a12 = (ev) => r2(mean(ev.filter((e) => e["12w"] != null).map((e) => e["12w"])) * 100, 2);
 const symbols = [], all = [];
 for (const { s, ev } of results) {
-  ev.forEach((e) => { e.category = s.category; all.push(e); });
+  const idx = symbols.length;
+  ev.forEach((e) => { e.category = s.category; e.sym = idx; all.push(e); });
   const L = ev.filter((e) => e.dir === "long"), Sh = ev.filter((e) => e.dir === "short");
   symbols.push({ file: s.file, tv: s.tv_symbol, name: s.name, category: s.category, nL: L.length, aL: a12(L), nS: Sh.length, aS: a12(Sh) });
 }
@@ -57,4 +88,16 @@ const dates = all.map((e) => e.date).sort();
 const summary = { asOf: uni.asOf, first: dates[0], last: dates.at(-1), total_signals: all.length,
   long: block(all.filter((e) => e.dir === "long")), short: block(all.filter((e) => e.dir === "short")), symbols };
 writeFileSync(new URL("./summary.json", import.meta.url), JSON.stringify(summary));
+// every signal for the calendar: [date, symbol index, +1 long / -1 short, return % per horizon (null = not yet), days to stop]
+const pctR = (x) => x == null ? null : Math.round(x * 1000) / 10;
+const events = all.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.sym - b.sym)
+  .map((e) => [e.date, e.sym, e.dir === "long" ? 1 : -1, ...Object.keys(HORIZONS).map((k) => pctR(e[k])), e.stopDay]);
+writeFileSync(new URL("./events.json", import.meta.url), JSON.stringify(events));
+writeFileSync(new URL("./screener.json", import.meta.url), JSON.stringify(results.map((x) => x.scr)));  // same order as summary.symbols
+// GitHub Pages serves the repo root: write the same page there, its scripts and data resolving to ema-cross/
+if (SRC) {
+  const page = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  if (!page.includes("<head>")) throw new Error("index.html has no <head>");
+  writeFileSync(new URL("../index.html", import.meta.url), page.replace("<head>", '<head>\n<base href="ema-cross/">'));
+}
 console.log(`summary.json: ${symbols.length} symbols, ${summary.long.total_signals} long + ${summary.short.total_signals} short signals, data as of ${uni.asOf}`);
